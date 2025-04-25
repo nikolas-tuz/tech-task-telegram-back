@@ -8,7 +8,6 @@ from jose import jwt
 
 from models.models import User
 from models.users.login.request import LoginRequest
-from models.users.response import UserResponse
 from utils.db import mongodb
 
 router = APIRouter(prefix="/users")
@@ -20,7 +19,7 @@ SECRET_KEY = os.getenv("JWT_SECRET")
 ALGORITHM = "HS256"
 
 
-@router.post("/register", response_model=UserResponse)
+@router.post("/register")
 async def create_user(user: User, response: Response):
     existing_user = await mongodb.db["users"].find_one({"email": user.email})
     if existing_user:
@@ -33,7 +32,7 @@ async def create_user(user: User, response: Response):
 
     result = await mongodb.db["users"].insert_one(user_dict)
 
-    user_dict["_id"] = result.inserted_id
+    user_dict["_id"] = str(result.inserted_id)
 
     # Generate JWT token
     token_data = {
@@ -44,12 +43,14 @@ async def create_user(user: User, response: Response):
     access_token = jwt.encode(token_data, SECRET_KEY, algorithm=ALGORITHM)
 
     # Set the token as a cookie
-    response.set_cookie(key="access_token", value=access_token, httponly=False)
+    response.set_cookie(key="access_token", value=access_token, httponly=True, samesite="lax", secure=False)
 
-    return user_dict
+    user_dict.pop("password", None)
+
+    return {"user": user_dict, "access_token": access_token}
 
 
-@router.get("/login", response_model=UserResponse)
+@router.post("/login")
 async def login(login_request: LoginRequest, response: Response):
     user = await mongodb.db["users"].find_one({"email": login_request.email})
     if not user:
@@ -60,9 +61,11 @@ async def login(login_request: LoginRequest, response: Response):
     if not passwords_match:
         raise HTTPException(status_code=403, detail="Wrong email or password.")
 
+    user["_id"] = str(user["_id"])
+
     # Generate JWT token
     token_data = {
-        "sub": str(user["_id"]),
+        "sub": user["_id"],
         "email": user.get("email"),
         "exp": datetime.utcnow() + timedelta(hours=1)  # Token expires in 1 hour
     }
@@ -73,4 +76,13 @@ async def login(login_request: LoginRequest, response: Response):
 
     user.pop("password", None)
 
-    return user
+    return {"user": user, "access_token": access_token}
+
+# @router.get("")
+# async def get_user_data(user: dict = Depends(auth_guard)):
+#     user = await mongodb.db["users"].find_one({"email": user["email"]})
+#     if not user:
+#         raise HTTPException(status_code=404, detail="User does not exist.")
+#
+#     user["_id"] = str(user["_id"])
+#     return {"user": user}

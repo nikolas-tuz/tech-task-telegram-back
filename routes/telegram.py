@@ -174,6 +174,7 @@ async def get_chat_messages_by_chat_id(
             messages = [
                 {"id": message.id, "text": message.message, "date": message.date}
                 async for message in session_client.iter_messages(id, limit=limit, offset_id=skip)
+                if message.message
             ]
 
         return {"message": "Messages fetched successfully", "messages": messages}

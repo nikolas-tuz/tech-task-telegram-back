@@ -1,7 +1,8 @@
 import os
 
 from dotenv import load_dotenv
-from fastapi import Request, HTTPException
+from fastapi import Request, HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 
 from utils.db import mongodb
@@ -12,10 +13,13 @@ load_dotenv()
 SECRET_KEY = os.getenv("JWT_SECRET")
 ALGORITHM = "HS256"
 
+# Initialize HTTPBearer for extracting the token
+security = HTTPBearer()
 
-async def auth_guard(request: Request):
-    # Extract the JWT token from cookies
-    token = request.cookies.get("access_token")
+
+async def auth_guard(request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    # Extract the JWT token from the Authorization header
+    token = credentials.credentials
     if not token:
         raise HTTPException(status_code=401, detail="Access token is missing.")
 
