@@ -131,11 +131,17 @@ async def get_user_chats(
                 detail="Please authorize your Telegram Account. Access is missing."
             )
 
-        # Initialize the Telegram client with the saved session
         async with TelegramClient(StringSession(telegram_session), API_ID, API_HASH) as session_client:
-            # Fetch the user's chats
             chats = [
-                {"name": dialog.name, "id": dialog.id}
+                {
+                    "id": dialog.id,
+                    "name": dialog.name,
+                    "lastMessage": {
+                        "text": dialog.message.message if dialog.message else None,
+                        # "emoji": dialog.message.reactions if dialog.message and dialog.message.reactions else None,
+                        "media": True if dialog.message and dialog.message.media else False
+                    }
+                }
                 async for dialog in session_client.iter_dialogs(limit=limit, offset_date=None, offset_id=skip)
             ]
 

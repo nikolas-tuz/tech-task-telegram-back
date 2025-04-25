@@ -3,11 +3,9 @@ import os
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.params import Depends
 
 import routes.telegram
 import routes.users
-from decorators.auth_guard import auth_guard
 from utils.db import mongodb
 
 app = FastAPI()
