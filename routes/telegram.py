@@ -6,10 +6,12 @@ from fastapi.params import Depends
 from telethon import TelegramClient
 from telethon.errors import FloodWaitError, PhoneNumberFloodError
 from telethon.errors import SessionPasswordNeededError
+from telethon.sessions import StringSession
 
 from decorators.auth_guard import auth_guard
 from models.telegram.get_chats import GetChatsRequest
 from models.telegram.send_code_to_number import SendCodeToPhoneRequest
+from utils.db import mongodb
 
 router = APIRouter(prefix="/telegram", dependencies=[Depends(auth_guard)])
 
@@ -55,8 +57,8 @@ async def send_code_to_phone(auth_request: SendCodeToPhoneRequest):
         await client.disconnect()
 
 
-@router.post('/authenticate/chats')
-async def verify_code_and_fetch_chats(auth_request: GetChatsRequest):
+@router.post('/authenticate/verify')
+async def verify_code_and_fetch_chats(auth_request: GetChatsRequest, user: dict = Depends(auth_guard), ):
     """
     Verify the code and fetch the user's chats.
     """
@@ -84,18 +86,54 @@ async def verify_code_and_fetch_chats(auth_request: GetChatsRequest):
                 detail="Verification code and phone_code_hash are required."
             )
 
-        # Fetch chats
-        chats = [
-            {"name": dialog.name, "id": dialog.id}
-            async for dialog in client.iter_dialogs()
-        ]
+        active_user = await mongodb.db["users"].find_one({"email": user["email"]})
+        if not active_user:
+            raise HTTPException(
+                status_code=404,
+                detail="User not found."
+            )
 
-        return {"message": "Authentication successful", "chats": chats}
+        session_string = StringSession.save(client.session)
+
+        await mongodb.db["users"].update_one(
+            {"email": user["email"]},
+            {"$set": {"telegram_session": session_string}}
+        )
+        return {"message": "Authentication successful"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to verify code or fetch chats: {str(e)}")
     finally:
         # Disconnect the client
         await client.disconnect()
+
+
+@router.get('/chats')
+async def get_user_chats(user: dict = Depends(auth_guard)):
+    """
+    Fetch the user's chats using the saved Telegram session.
+    """
+    try:
+        # Retrieve the user's telegram_session from the database
+        active_user = await mongodb.db["users"].find_one({"email": user["email"]})
+        if not active_user or "telegram_session" not in active_user:
+            raise HTTPException(
+                status_code=404,
+                detail="Telegram session not found. Please authenticate first."
+            )
+
+        session_string = active_user["telegram_session"]
+
+        # Initialize the Telegram client with the saved session
+        async with TelegramClient(StringSession(session_string), API_ID, API_HASH) as session_client:
+            # Fetch the user's chats
+            chats = [
+                {"name": dialog.name, "id": dialog.id}
+                async for dialog in session_client.iter_dialogs()
+            ]
+
+        return {"message": "Chats fetched successfully", "chats": chats}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch chats: {str(e)}")
 
 
 async def health_check():

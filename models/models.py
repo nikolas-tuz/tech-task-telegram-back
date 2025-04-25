@@ -1,3 +1,5 @@
+from typing import Optional
+
 from bson import ObjectId
 from pydantic import BaseModel, EmailStr, validator
 
@@ -17,6 +19,7 @@ class PyObjectId(ObjectId):
 class User(BaseModel):
     email: EmailStr
     password: str
+    telegram_session: Optional[str] = None  # Default to None
 
     @validator("password")
     def validate_password(cls, value):
@@ -26,3 +29,4 @@ class User(BaseModel):
 
     class Config:
         json_encoders = {ObjectId: str}
+        fields = {"telegram_session": {"exclude": True}}
