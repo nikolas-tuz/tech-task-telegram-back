@@ -131,10 +131,8 @@ async def get_user_chats(
                 detail="Please authorize your Telegram Account. Access is missing."
             )
 
-        session_string = active_user["telegram_session"]
-
         # Initialize the Telegram client with the saved session
-        async with TelegramClient(StringSession(session_string), API_ID, API_HASH) as session_client:
+        async with TelegramClient(StringSession(telegram_session), API_ID, API_HASH) as session_client:
             # Fetch the user's chats
             chats = [
                 {"name": dialog.name, "id": dialog.id}
@@ -142,6 +140,43 @@ async def get_user_chats(
             ]
 
         return {"message": "Chats fetched successfully", "chats": chats}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch chats: {str(e)}")
+
+
+@router.get('/chats/{id}')
+async def get_chat_messages_by_chat_id(
+        id: int,
+        limit: int = Query(10, ge=1),
+        skip: int = Query(0, ge=0),
+        user: dict = Depends(auth_guard)):
+    """
+    Fetch the user's chats using the saved Telegram session.
+    """
+    try:
+        # Retrieve the user's telegram_session from the database
+        active_user = await mongodb.db["users"].find_one({"email": user["email"]})
+        if not active_user or "telegram_session" not in active_user:
+            raise HTTPException(
+                status_code=404,
+                detail="Telegram session not found. Please authenticate first."
+            )
+        telegram_session = active_user["telegram_session"]
+
+        if not telegram_session:
+            raise HTTPException(
+                status_code=401,
+                detail="Please authorize your Telegram Account. Access is missing."
+            )
+
+        # Initialize the Telegram client with the saved session
+        async with TelegramClient(StringSession(telegram_session), API_ID, API_HASH) as session_client:
+            messages = [
+                {"id": message.id, "text": message.message, "date": message.date}
+                async for message in session_client.iter_messages(id, limit=limit, offset_id=skip)
+            ]
+
+        return {"message": "Messages fetched successfully", "messages": messages}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch chats: {str(e)}")
 
