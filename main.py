@@ -1,11 +1,15 @@
 from fastapi import FastAPI
+from fastapi.params import Depends
 
+import routes.telegram
 import routes.users
+from decorators.auth_guard import auth_guard
 from utils.db import mongodb
 
 app = FastAPI()
 
 app.include_router(routes.users.router)
+app.include_router(routes.telegram.router)
 
 
 @app.on_event("startup")
@@ -19,5 +23,5 @@ async def shutdown_db():
 
 
 @app.get("/")
-async def healthCheck():
-    return {"message": "healthy"}
+async def health_check(user: dict = Depends(auth_guard)):
+    return {"message": "/ is healthy."}
