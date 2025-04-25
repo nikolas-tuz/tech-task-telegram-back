@@ -1,7 +1,7 @@
 import os
 
 from dotenv import load_dotenv
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.params import Depends
 from telethon import TelegramClient
 from telethon.errors import FloodWaitError, PhoneNumberFloodError
@@ -9,8 +9,8 @@ from telethon.errors import SessionPasswordNeededError
 from telethon.sessions import StringSession
 
 from decorators.auth_guard import auth_guard
-from models.telegram.get_chats import GetChatsRequest
 from models.telegram.send_code_to_number import SendCodeToPhoneRequest
+from models.telegram.verify import VerifyRequest
 from utils.db import mongodb
 
 router = APIRouter(prefix="/telegram", dependencies=[Depends(auth_guard)])
@@ -58,7 +58,7 @@ async def send_code_to_phone(auth_request: SendCodeToPhoneRequest):
 
 
 @router.post('/authenticate/verify')
-async def verify_code_and_fetch_chats(auth_request: GetChatsRequest, user: dict = Depends(auth_guard), ):
+async def verify_user_telegram(auth_request: VerifyRequest, user: dict = Depends(auth_guard), ):
     """
     Verify the code and fetch the user's chats.
     """
@@ -108,7 +108,10 @@ async def verify_code_and_fetch_chats(auth_request: GetChatsRequest, user: dict 
 
 
 @router.get('/chats')
-async def get_user_chats(user: dict = Depends(auth_guard)):
+async def get_user_chats(
+        limit: int = Query(10, ge=1),
+        skip: int = Query(0, ge=0),
+        user: dict = Depends(auth_guard)):
     """
     Fetch the user's chats using the saved Telegram session.
     """
@@ -120,6 +123,13 @@ async def get_user_chats(user: dict = Depends(auth_guard)):
                 status_code=404,
                 detail="Telegram session not found. Please authenticate first."
             )
+        telegram_session = active_user["telegram_session"]
+
+        if not telegram_session:
+            raise HTTPException(
+                status_code=401,
+                detail="Please authorize your Telegram Account. Access is missing."
+            )
 
         session_string = active_user["telegram_session"]
 
@@ -128,7 +138,7 @@ async def get_user_chats(user: dict = Depends(auth_guard)):
             # Fetch the user's chats
             chats = [
                 {"name": dialog.name, "id": dialog.id}
-                async for dialog in session_client.iter_dialogs()
+                async for dialog in session_client.iter_dialogs(limit=limit, offset_date=None, offset_id=skip)
             ]
 
         return {"message": "Chats fetched successfully", "chats": chats}
