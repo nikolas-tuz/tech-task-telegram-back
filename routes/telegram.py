@@ -23,7 +23,7 @@ API_HASH = os.getenv("TELEGRAM_API_HASH")
 client = TelegramClient("session_name", API_ID, API_HASH)
 
 
-@router.delete("/delete-session")
+@router.delete("/logout")
 async def delete_telegram_session(user: dict = Depends(auth_guard)):
     active_user = await mongodb.db["users"].find_one({"email": user["email"]})
     if not active_user or "telegram_session" not in active_user:
@@ -31,12 +31,24 @@ async def delete_telegram_session(user: dict = Depends(auth_guard)):
             status_code=404,
             detail="User not found."
         )
-    active_user["telegram_session"] = None
 
+    telegram_session = active_user["telegram_session"]
+    if not telegram_session:
+        raise HTTPException(
+            status_code=400,
+            detail="No active Telegram session found."
+        )
+
+    # Log out from Telegram
+    async with TelegramClient(StringSession(telegram_session), API_ID, API_HASH) as session_client:
+        await session_client.log_out()
+
+    # Remove the session from the database
     await mongodb.db["users"].update_one(
         {"email": user["email"]},
         {"$set": {"telegram_session": None}}
     )
+
     return {"status": "success"}
 
 
@@ -117,7 +129,7 @@ async def verify_user_telegram(auth_request: VerifyRequest, user: dict = Depends
             {"email": user["email"]},
             {"$set": {"telegram_session": session_string}}
         )
-        return {"message": "Authentication successful", "status": "success"}
+        return {"message": "Authentication successful", "status": "success", "telegram_session": session_string}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to verify code or fetch chats: {str(e)}")
     finally:
@@ -171,7 +183,6 @@ async def get_user_chats(
 async def get_chat_messages_by_chat_id(
         id: int,
         limit: int = Query(40, ge=1),
-        # skip: int = Query(0, ge=0),
         user: dict = Depends(auth_guard)):
     """
     Fetch the user's chats using the saved Telegram session.
@@ -193,14 +204,20 @@ async def get_chat_messages_by_chat_id(
             )
 
         async with TelegramClient(StringSession(telegram_session), API_ID, API_HASH) as session_client:
-            # Fetch the chat entity to get the chat name
-            chat_entity = await session_client.get_entity(id)
-            chat_name = chat_entity.title if hasattr(chat_entity, "title") else chat_entity.username
+            # Ensure the entity is resolvable
+            try:
+                chat_entity = await session_client.get_input_entity(id)
+                print("chat_entity:", chat_entity)
+            except Exception:
+                # Load dialogs to ensure the entity is cached
+                async for _ in session_client.iter_dialogs():
+                    pass
+                chat_entity = await session_client.get_input_entity(id)
 
             # Fetch the messages
             messages = [
                 {"id": message.id, "text": message.message, "date": message.date}
-                async for message in session_client.iter_messages(id, limit=limit)
+                async for message in session_client.iter_messages(chat_entity, limit=limit)
                 if message.message
             ]
 
@@ -208,8 +225,6 @@ async def get_chat_messages_by_chat_id(
             "message": "Messages fetched successfully",
             "messages": messages[::-1] or [],
             "chatId": id,
-            "chatName": chat_name
-
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch chats: {str(e)}")
