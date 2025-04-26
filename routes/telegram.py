@@ -23,6 +23,23 @@ API_HASH = os.getenv("TELEGRAM_API_HASH")
 client = TelegramClient("session_name", API_ID, API_HASH)
 
 
+@router.delete("/delete-session")
+async def delete_telegram_session(user: dict = Depends(auth_guard)):
+    active_user = await mongodb.db["users"].find_one({"email": user["email"]})
+    if not active_user or "telegram_session" not in active_user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found."
+        )
+    active_user["telegram_session"] = None
+
+    await mongodb.db["users"].update_one(
+        {"email": user["email"]},
+        {"$set": {"telegram_session": None}}
+    )
+    return {"status": "success"}
+
+
 @router.post('/authenticate/send-code')
 async def send_code_to_phone(auth_request: SendCodeToPhoneRequest):
     """
@@ -36,6 +53,7 @@ async def send_code_to_phone(auth_request: SendCodeToPhoneRequest):
         code_request = await client.send_code_request(auth_request.phone_number)
         return {
             "message": "Code sent to the provided phone number.",
+            "status": "success",
             "phone_code_hash": code_request.phone_code_hash
         }
     except PhoneNumberFloodError:
@@ -99,7 +117,7 @@ async def verify_user_telegram(auth_request: VerifyRequest, user: dict = Depends
             {"email": user["email"]},
             {"$set": {"telegram_session": session_string}}
         )
-        return {"message": "Authentication successful"}
+        return {"message": "Authentication successful", "status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to verify code or fetch chats: {str(e)}")
     finally:
@@ -109,8 +127,8 @@ async def verify_user_telegram(auth_request: VerifyRequest, user: dict = Depends
 
 @router.get('/chats')
 async def get_user_chats(
-        limit: int = Query(10, ge=1),
-        skip: int = Query(0, ge=0),
+        limit: int = Query(30, ge=1),
+        # skip: int = Query(0),
         user: dict = Depends(auth_guard)):
     """
     Fetch the user's chats using the saved Telegram session.
@@ -142,10 +160,9 @@ async def get_user_chats(
                         "media": True if dialog.message and dialog.message.media else False
                     }
                 }
-                async for dialog in session_client.iter_dialogs(limit=limit, offset_date=None, offset_id=skip)
+                async for dialog in session_client.iter_dialogs(limit=limit, offset_date=None)
             ]
-
-        return {"message": "Chats fetched successfully", "chats": chats}
+        return {"message": "Chats fetched successfully", "chats": chats or []}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch chats: {str(e)}")
 
@@ -153,8 +170,8 @@ async def get_user_chats(
 @router.get('/chats/{id}')
 async def get_chat_messages_by_chat_id(
         id: int,
-        limit: int = Query(10, ge=1),
-        skip: int = Query(0, ge=0),
+        limit: int = Query(40, ge=1),
+        # skip: int = Query(0, ge=0),
         user: dict = Depends(auth_guard)):
     """
     Fetch the user's chats using the saved Telegram session.
@@ -175,15 +192,25 @@ async def get_chat_messages_by_chat_id(
                 detail="Please authorize your Telegram Account. Access is missing."
             )
 
-        # Initialize the Telegram client with the saved session
         async with TelegramClient(StringSession(telegram_session), API_ID, API_HASH) as session_client:
+            # Fetch the chat entity to get the chat name
+            chat_entity = await session_client.get_entity(id)
+            chat_name = chat_entity.title if hasattr(chat_entity, "title") else chat_entity.username
+
+            # Fetch the messages
             messages = [
                 {"id": message.id, "text": message.message, "date": message.date}
-                async for message in session_client.iter_messages(id, limit=limit, offset_id=skip)
+                async for message in session_client.iter_messages(id, limit=limit)
                 if message.message
             ]
 
-        return {"message": "Messages fetched successfully", "messages": messages}
+        return {
+            "message": "Messages fetched successfully",
+            "messages": messages[::-1] or [],
+            "chatId": id,
+            "chatName": chat_name
+
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch chats: {str(e)}")
 
