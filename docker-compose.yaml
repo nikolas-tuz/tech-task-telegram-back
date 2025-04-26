@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  fastapi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fastapi
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - JWT_SECRET=534bf7011708742cd135692578a45ee725ff738d1eed6a36bcaa0caaf2cbbefe
+      - TELEGRAM_API_ID=<telegram_api_id>
+      - TELEGRAM_API_HASH=<telegram_api_hash>
+      - ALLOWED_HOST=http://localhost:3000
+    depends_on:
+      - mongo
+    volumes:
+      - .:/app
+  mongo:
+    image: mongo
