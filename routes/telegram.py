@@ -26,7 +26,7 @@ client = TelegramClient("session_name", API_ID, API_HASH)
 @router.delete("/logout")
 async def delete_telegram_session(user: dict = Depends(auth_guard)):
     active_user = await mongodb.db["users"].find_one({"email": user["email"]})
-    if not active_user or "telegram_session" not in active_user:
+    if not active_user:
         raise HTTPException(
             status_code=404,
             detail="User not found."
