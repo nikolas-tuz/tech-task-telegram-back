@@ -52,8 +52,8 @@
     Open your terminal and execute the following commands to clone the frontend and backend repositories:
 
     ```bash
-    git clone [https://github.com/nikolas-tuz/tech-task-telegram-front.git](https://github.com/nikolas-tuz/tech-task-telegram-front.git)
-    git clone [https://github.com/nikolas-tuz/tech-task-telegram-back.git](https://github.com/nikolas-tuz/tech-task-telegram-back.git)
+    git clone https://github.com/nikolas-tuz/tech-task-telegram-front.git
+    git clone https://github.com/nikolas-tuz/tech-task-telegram-back.git
     ```
 
 2.  **Configure the backend:**
