@@ -1,0 +1,13 @@
+.venv
+session_name.session
+.env
+test_main.http
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+
+# Git and version control
+.git/
+.gitignore

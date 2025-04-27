@@ -207,7 +207,6 @@ async def get_chat_messages_by_chat_id(
             # Ensure the entity is resolvable
             try:
                 chat_entity = await session_client.get_input_entity(id)
-                print("chat_entity:", chat_entity)
             except Exception:
                 # Load dialogs to ensure the entity is cached
                 async for _ in session_client.iter_dialogs():

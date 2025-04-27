@@ -21,5 +21,8 @@ class MongoDB:
         print("MongoDB connection closed")
 
 
-# Singleton instance
-mongodb = MongoDB(uri="mongodb://localhost:27017", db_name="telegram-app")
+# Singleton instance for NON dockerized app
+# mongodb = MongoDB(uri="mongodb://localhost:27017", db_name="telegram-app")
+
+# Singleton instance for DOCKERIZED application
+mongodb = MongoDB(uri="mongodb://mongo:27017", db_name="telegram-app")
