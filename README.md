@@ -118,7 +118,7 @@
 
         ```
         JWT_SECRET=534bf7011708742cd135692578a45ee725ff738d1eed6a36bcaa0caaf2cbbefe
-        NEXT_PUBLIC_BACKEND_URL=[http://127.0.0.1:8000](http://127.0.0.1:8000)
+        NEXT_PUBLIC_BACKEND_URL=http://127.0.0.1:8000
         ```
 
 5.  **Run the frontend:**
